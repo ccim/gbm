@@ -14,7 +14,9 @@ gbmCrossVal <- function(cv.folds, nTrain, n.cores,
                         n.trees, interaction.depth, n.minobsinnode,
                         shrinkage, bag.fraction, mFeatures,
                         var.names, response.name, group, lVerbose, keep.data,
-                        fold.id) {
+                        fold.id,
+                        aggregate_trees=TRUE,
+                        Terms=NULL) {
   i.train <- 1:nTrain
   cv.group <- getCVgroup(distribution, class.stratify.cv, y,
                          i.train, cv.folds, group, fold.id)
@@ -26,7 +28,8 @@ gbmCrossVal <- function(cv.folds, nTrain, n.cores,
                                      n.minobsinnode, shrinkage,
                                      bag.fraction, mFeatures, var.names,
                                      response.name, group, lVerbose, keep.data, 
-                                     nTrain)
+                                     nTrain,
+                                     Terms)
 
   # First element is final model
   all.model <- cv.models[[1]]
@@ -38,13 +41,15 @@ gbmCrossVal <- function(cv.folds, nTrain, n.cores,
   ## get the predictions
   predictions <- gbmCrossValPredictions(cv.models, cv.folds, cv.group,
                                         best.iter.cv, distribution,
-                                        data[i.train,,drop=FALSE], y)
+                                        data[i.train,,drop=FALSE], y,
+                                        aggregate_trees=aggregate_trees)
 
-  all.model$fold.id <- fold.id
+  all.model$fold.id <- cv.group
 
   list(error=cv.error,
        predictions=predictions,
-       all.model=all.model)
+       all.model=all.model,
+       cv.models=cv.models)
 }
 
 ## Get the gbm cross-validation error
@@ -65,28 +70,44 @@ gbmCrossValErr <- function(cv.models, cv.folds, cv.group, nTrain, n.trees) {
 ##
 ## This function is not as nice as it could be (leakage of y)
 gbmCrossValPredictions <- function(cv.models, cv.folds, cv.group,
-                                   best.iter.cv, distribution, data, y) {
+                                   best.iter.cv, distribution, data, y,
+                                   aggregate_trees=TRUE) {
   ## test cv.group and data match
   if (nrow(data) != length(cv.group)) {
     stop("mismatch between data and cv.group")
   }
-
-  num.cols <- 1
-  result <- matrix(nrow=nrow(data), ncol=num.cols)
   ## there's no real reason to do this as other than a for loop
   data.names <- names(data)
-  for (ind in 1:cv.folds) {
-    ## these are the particular elements
-    flag <- cv.group == ind
-    model <- cv.models[[ind]]
-    ## the %in% here is to handle coxph
-    my.data  <- data[flag, model$var.names, drop=FALSE]
-    predictions <- predict(model, newdata=my.data, n.trees=best.iter.cv)
-    predictions <- matrix(predictions, ncol=num.cols)
-    result[flag,] <- predictions
+  if(aggregate_trees) {
+    num.cols <- 1
+    result <- matrix(nrow=nrow(data), ncol=num.cols)
+    for (ind in 1:cv.folds) {
+      ## these are the particular elements
+      flag <- cv.group == ind
+      model <- cv.models[[ind]]
+      ## the %in% here is to handle coxph
+      my.data  <- data[flag, model$var.names, drop=FALSE]
+      predictions <- predict(model, newdata=my.data, n.trees=best.iter.cv)
+      predictions <- matrix(predictions, ncol=num.cols)
+      result[flag,] <- predictions
+      return( as.numeric(result) )
+    }
+  } else {
+    num.cols <- best.iter.cv
+    result <- matrix(nrow=nrow(data), ncol=num.cols)
+    for (ind in 1:cv.folds) {
+      ## these are the particular elements
+      flag <- cv.group == ind
+      model <- cv.models[[ind]]
+      ## the %in% here is to handle coxph
+      my.data  <- data[flag, model$var.names, drop=FALSE]
+      #predictions <- predict(model, newdata=my.data, n.trees=1:best.iter.cv)
+      #predictions <- matrix(predictions, ncol=num.cols)
+      result[flag,] <- predict(model, newdata=my.data, n.trees=1:best.iter.cv)#predictions
+    }
+    return(result)
   }
-
-  as.numeric(result)
+ 
 }
 
 
@@ -99,7 +120,7 @@ gbmCrossValModelBuild <- function(cv.folds, cv.group, n.cores, i.train,
                                   interaction.depth, n.minobsinnode,
                                   shrinkage, bag.fraction, mFeatures,
                                   var.names, response.name,
-                                  group, lVerbose, keep.data, nTrain) {
+                                  group, lVerbose, keep.data, nTrain,Terms) {
   ## set up the cluster and add a finalizer
   cluster <- gbmCluster(n.cores)
   on.exit(if (!is.null(cluster)){ parallel::stopCluster(cluster) })
@@ -114,7 +135,8 @@ gbmCrossValModelBuild <- function(cv.folds, cv.group, n.cores, i.train,
             w, var.monotone, n.trees,
             interaction.depth, n.minobsinnode, shrinkage,
             bag.fraction, mFeatures,
-            cv.group, var.names, response.name, group, seeds, lVerbose, keep.data, nTrain)
+            cv.group, var.names, response.name, group, seeds, lVerbose, keep.data, nTrain,
+            Terms)
   }
   else {
     lapply(X=0:cv.folds,
@@ -122,6 +144,7 @@ gbmCrossValModelBuild <- function(cv.folds, cv.group, n.cores, i.train,
             w, var.monotone, n.trees,
             interaction.depth, n.minobsinnode, shrinkage,
             bag.fraction, mFeatures,
-            cv.group, var.names, response.name, group, seeds, lVerbose, keep.data, nTrain)
+            cv.group, var.names, response.name, group, seeds, lVerbose, keep.data, nTrain,
+           Terms)
   }
 }

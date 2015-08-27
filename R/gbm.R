@@ -412,6 +412,7 @@ gbm <- function(formula = formula(data),
                 train.fraction = 1.0,
                 mFeatures = NULL,
                 cv.folds=0,
+                aggregate_trees=TRUE,
                 keep.data = TRUE,
                 verbose = 'CV',
                 class.stratify.cv=NULL,
@@ -555,10 +556,13 @@ gbm <- function(formula = formula(data),
                                n.trees, interaction.depth, n.minobsinnode,
                                shrinkage, bag.fraction, mFeatures,
                                var.names, response.name, group, lVerbose,
-                               keep.data, fold.id)
+                               keep.data, fold.id,
+                               aggregate_trees=aggregate_trees,
+                               Terms=Terms)
      cv.error <- cv.results$error
      p        <- cv.results$predictions
      gbm.obj  <- cv.results$all.model
+     gbm.obj$cv.models <- cv.results$cv.models
    } 
 
    else {
