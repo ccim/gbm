@@ -523,7 +523,7 @@ gbm <- function(formula = formula(data),
       mFeatures <- ncol(x)
     } else {
       if (mFeatures > ncol(x)) {
-        print("mFeatures was greater than the number of columns. It was reset to the available features.")
+        #print("mFeatures was greater than the number of columns. It was reset to the available features.")
         mFeatures <- ncol(x)
       } else {
         mFeatures <- max(mFeatures, 1)
